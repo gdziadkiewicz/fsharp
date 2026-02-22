@@ -9,6 +9,8 @@ open FSharp.Compiler.Diagnostics
 open System.Threading
 
 open FSharp.Compiler.CodeAnalysis
+open FSharp.Compiler.EditorServices
+open FSharp.Compiler.Symbols
 
 open Internal.Utilities.DependencyGraph
 open Internal.Utilities.Library.Extras
@@ -104,6 +106,53 @@ type FSharpWorkspaceQuery internal (depGraph: IThreadSafeDependencyGraph<_, _>, 
         |> Option.map (fun snapshot ->
             checker.GetBackgroundSemanticClassificationForFile(file.LocalPath, snapshot, "LSP Get semantic classification"))
         |> Option.defaultValue (async.Return None)
+
+    member this.GetTypeDefinitionForFile(file: Uri, line: int, column: int) =
+        use _ =
+            Activity.start "GetTypeDefinitionForFile" [ Activity.Tags.fileName, file.LocalPath ]
+
+        async {
+            let! source = this.GetSource file |> Async.AwaitTask
+
+            match source with
+            | None ->
+                return None
+            | Some sourceText ->
+                if line <= 0 || line > sourceText.GetLineCount() then
+                    return None
+
+                let lineText = sourceText.GetLineString(line - 1)
+
+                match QuickParse.GetCompleteIdentifierIsland(true, lineText, column) with
+                | None ->
+                    return None
+                | Some(identIsland, colAtEndOfNames, _) ->
+                    let names = identIsland.Split('.') |> Array.toList
+
+                    let! checkResults = this.GetCheckResultsForFile file
+
+                    match checkResults with
+                    | None ->
+                        return None
+                    | Some checkResults ->
+                        match checkResults.GetSymbolUseAtLocation(line, colAtEndOfNames, lineText, names) with
+                        | None ->
+                            return None
+                        | Some symbolUse ->
+                            match symbolUse.Symbol with
+                            | :? FSharpEntity as entity ->
+                                return Some entity.DeclarationLocation
+                            | :? FSharpField as field when field.FieldType.HasTypeDefinition ->
+                                return field.FieldType.TypeDefinition.DeclarationLocation
+                            | :? FSharpMemberOrFunctionOrValue as memberOrFunctionOrValue when memberOrFunctionOrValue.FullTypeSafe.HasTypeDefinition ->
+                                return memberOrFunctionOrValue.FullTypeSafe.TypeDefinition.DeclarationLocation
+                            | :? FSharpParameter as parameter when parameter.Type.HasTypeDefinition ->
+                                return parameter.Type.TypeDefinition.DeclarationLocation
+                            | :? FSharpUnionCase as unionCase when unionCase.ReturnType.HasTypeDefinition ->
+                                return unionCase.ReturnType.TypeDefinition.DeclarationLocation
+                            | _ ->
+                                return None
+        }
 
     member _.GetSource(file: Uri) =
         task {
