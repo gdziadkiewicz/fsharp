@@ -72,6 +72,7 @@ internal class VsServerCapabilitiesOverride : IServerCapabilitiesOverride
                         //new(PullDiagnosticCategories.DocumentAnalyzerSemantic),
                     ]
             } : null,
+            TypeDefinitionProvider = config.EnabledFeatures.TypeDefinition ? new SumType<bool, TypeDefinitionOptions>(true) : null,
             SemanticTokensOptions = config.EnabledFeatures.SemanticHighlighting ? new()
             {
                 Legend = new()
@@ -292,7 +293,8 @@ internal class FSharpLanguageServerProvider : LanguageServerProvider
         var serverConfig = new FSharpLanguageServerConfig(
             new FSharpLanguageServerFeatures(
                 diagnostics: enabled.Contains(settingsReadResult.ValueOrDefault(FSharpExtensionSettings.GetDiagnosticsFrom, defaultValue: FSharpExtensionSettings.BOTH)),
-                semanticHighlighting: enabled.Contains(settingsReadResult.ValueOrDefault(FSharpExtensionSettings.GetSemanticHighlightingFrom, defaultValue: FSharpExtensionSettings.BOTH))
+                semanticHighlighting: enabled.Contains(settingsReadResult.ValueOrDefault(FSharpExtensionSettings.GetSemanticHighlightingFrom, defaultValue: FSharpExtensionSettings.BOTH)),
+                typeDefinition: enabled.Contains(settingsReadResult.ValueOrDefault(FSharpExtensionSettings.GetTypeDefinitionFrom, defaultValue: FSharpExtensionSettings.BOTH))
                 ));
 
         var disposeToEndSubscription =

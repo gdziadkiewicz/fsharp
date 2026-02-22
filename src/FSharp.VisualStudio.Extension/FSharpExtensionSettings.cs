@@ -46,10 +46,22 @@ namespace FSharp.VisualStudio.Extension
             Description = "%Which extension should be used to provide semantic highlighting%",
         };
 
+        [VisualStudioContribution]
+        public static Setting.Enum GetTypeDefinitionFrom { get; } = new(
+            "getTypeDefinitionFrom",
+            "%FSharpSettings.GetTypeDefinitionFrom%",
+            FSharpCategory,
+            ExtensionChoice,
+            defaultValue: UNSET)
+        {
+            Description = "%Which extension should be used to provide go to type definition%",
+        };
+
         public static Setting<string>[] AllStringSettings { get; } =
         [
             GetDiagnosticsFrom,
             GetSemanticHighlightingFrom,
+            GetTypeDefinitionFrom,
         ];
     }
 }
