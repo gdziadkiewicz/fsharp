@@ -11,6 +11,7 @@ open System.Threading
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.EditorServices
 open FSharp.Compiler.Symbols
+open FSharp.Compiler.Text
 
 open Internal.Utilities.DependencyGraph
 open Internal.Utilities.Library.Extras
@@ -117,44 +118,48 @@ type FSharpWorkspaceQuery internal (depGraph: IThreadSafeDependencyGraph<_, _>, 
             match source with
             | None ->
                 return None
-            | Some sourceText ->
+            | Some(sourceText: ISourceTextNew) ->
                 if line <= 0 || line > sourceText.GetLineCount() then
                     return None
+                else
+                    let lineText = sourceText.GetLineString(line - 1)
 
-                let lineText = sourceText.GetLineString(line - 1)
-
-                match QuickParse.GetCompleteIdentifierIsland(true, lineText, column) with
-                | None ->
-                    return None
-                | Some(identIsland, colAtEndOfNames, _) ->
-                    let names = identIsland.Split('.') |> Array.toList
-
-                    let! checkResults = this.GetCheckResultsForFile file
-
-                    match checkResults with
+                    match QuickParse.GetCompleteIdentifierIsland true lineText column with
                     | None ->
                         return None
-                    | Some checkResults ->
-                        match checkResults.GetSymbolUseAtLocation(line, colAtEndOfNames, lineText, names) with
+                    | Some(identIsland, colAtEndOfNames, _) ->
+                        let names = identIsland.Split('.') |> Array.toList
+
+                        let! checkResults = this.GetCheckResultsForFile file
+
+                        match checkResults with
                         | None ->
                             return None
-                        | Some symbolUse ->
-                            match symbolUse.Symbol with
-                            | :? FSharpEntity as entity ->
-                                return Some entity.DeclarationLocation
-                            | :? FSharpField as field when field.FieldType.HasTypeDefinition ->
-                                return field.FieldType.TypeDefinition.DeclarationLocation
-                            | :? FSharpMemberOrFunctionOrValue as memberOrFunctionOrValue when memberOrFunctionOrValue.FullTypeSafe.HasTypeDefinition ->
-                                return memberOrFunctionOrValue.FullTypeSafe.TypeDefinition.DeclarationLocation
-                            | :? FSharpParameter as parameter when parameter.Type.HasTypeDefinition ->
-                                return parameter.Type.TypeDefinition.DeclarationLocation
-                            | :? FSharpUnionCase as unionCase when unionCase.ReturnType.HasTypeDefinition ->
-                                return unionCase.ReturnType.TypeDefinition.DeclarationLocation
-                            | _ ->
+                        | Some checkResults ->
+                            match checkResults.GetSymbolUseAtLocation(line, colAtEndOfNames, lineText, names) with
+                            | None ->
                                 return None
+                            | Some symbolUse ->
+                                match symbolUse.Symbol with
+                                | :? FSharpEntity as entity ->
+                                    return Some entity.DeclarationLocation
+                                | :? FSharpField as field when field.FieldType.HasTypeDefinition ->
+                                    return Some field.FieldType.TypeDefinition.DeclarationLocation
+                                | :? FSharpMemberOrFunctionOrValue as memberOrFunctionOrValue ->
+                                    match memberOrFunctionOrValue.FullTypeSafe with
+                                    | Some fullType when fullType.HasTypeDefinition ->
+                                        return Some fullType.TypeDefinition.DeclarationLocation
+                                    | _ ->
+                                        return None
+                                | :? FSharpParameter as parameter when parameter.Type.HasTypeDefinition ->
+                                    return Some parameter.Type.TypeDefinition.DeclarationLocation
+                                | :? FSharpUnionCase as unionCase when unionCase.ReturnType.HasTypeDefinition ->
+                                    return Some unionCase.ReturnType.TypeDefinition.DeclarationLocation
+                                | _ ->
+                                    return None
         }
 
-    member _.GetSource(file: Uri) =
+    member _.GetSource(file: Uri) : Threading.Tasks.Task<ISourceTextNew option> =
         task {
             try
                 let! source = depGraph.GetSourceFile(file.LocalPath).GetSource()

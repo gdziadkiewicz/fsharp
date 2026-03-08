@@ -72,7 +72,7 @@ internal class VsServerCapabilitiesOverride : IServerCapabilitiesOverride
                         //new(PullDiagnosticCategories.DocumentAnalyzerSemantic),
                     ]
             } : null,
-            TypeDefinitionProvider = config.EnabledFeatures.TypeDefinition ? new SumType<bool, TypeDefinitionOptions>(true) : null,
+            TypeDefinitionProvider = config.EnabledFeatures.TypeDefinition ? new SumType<bool, TypeDefinitionOptions>(true) : null!,
             SemanticTokensOptions = config.EnabledFeatures.SemanticHighlighting ? new()
             {
                 Legend = new()
